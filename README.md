@@ -7,41 +7,6 @@
 
 A modern, full-stack fraud detection and transaction monitoring system built with Go, React, and best practices.
 
-## Features
-
-### Security & Authentication
-- JWT-based authentication with role-based access control (RBAC)
-- Secure password hashing with bcrypt
-- Protected API endpoints with middleware
-- Audit logging for all user actions
-
-### Advanced Fraud Detection
-- Multi-layered fraud detection engine with configurable rules
-- Machine Learning-inspired behavior analysis
-- Real-time risk scoring with weighted algorithms
-- Velocity checks, location anomaly detection, and pattern recognition
-- Dynamic rule management for fraud detection
-
-### Professional Dashboard
-- Real-time transaction monitoring with live charts
-- Interactive data visualizations using Recharts
-- Comprehensive analytics and KPI metrics
-- Alert management system with severity levels
-- Responsive design with Tailwind CSS
-
-### Real-time Communications
-- WebSocket-based real-time alerts and notifications
-- Live transaction updates and fraud alerts
-- Multi-user notification broadcasting
-- Connection management and auto-reconnection
-
-### Enterprise Architecture
-- RESTful API design with comprehensive endpoints
-- Database connection pooling and optimization
-- Structured logging with different levels
-- Graceful shutdown and error handling
-- Health checks and monitoring endpoints
-
 ## Architecture
 
 ```
