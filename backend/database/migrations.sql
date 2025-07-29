@@ -85,7 +85,7 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
 
 INSERT INTO users (username, email, password_hash, role) 
-VALUES ('admin', 'admin@example.com', '$2a$10$rVQ3Y9Y9Y9Y9Y9Y9Y9Y9YeY9Y9Y9Y9Y9Y9Y9Y9Y9Y9Y9Y9Y9Y9Y9Y9Y', 'admin')
+VALUES ('admin', 'admin@example.com', '$2a$10$GaAlTVe2fvNmPGhhCv2mbe8Tt361IxmvS1fifgICokTe1dzmZU1yy', 'admin')
 ON CONFLICT (username) DO NOTHING;
 
 INSERT INTO fraud_rules (name, description, rule_type, parameters, threshold, weight) VALUES
