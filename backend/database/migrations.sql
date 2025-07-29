@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS customers (
 
 CREATE TABLE IF NOT EXISTS transactions (
     id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES customers(id),
+    user_id INTEGER/* REFERENCES customers(id)*/,
     amount DECIMAL(12,2) NOT NULL,
     currency CHAR(3) DEFAULT 'USD',
     merchant_id VARCHAR(50),

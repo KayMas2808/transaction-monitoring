@@ -3,8 +3,8 @@ version: '3.8'
 services:
   postgres:
     build:
-      context: .  # Set build context to the root of the repository
-      dockerfile: docker/postgres/Dockerfile # Specify the path to your custom Dockerfile
+      context: .
+      dockerfile: docker/postgres/Dockerfile
     container_name: transaction-monitoring-db
     environment:
       POSTGRES_DB: transactions_db
@@ -13,8 +13,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data # ONLY keep this line for data persistence
-      # The line "- ./backend/database/migrations.sql:/docker-entrypoint-initdb.d/init.sql" must be DELETED
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U transaction_user -d transactions_db"]
       interval: 10s

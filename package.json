@@ -1,0 +1,23 @@
+{
+  "name": "transaction-monitoring",
+  "version": "1.0.0",
+  "description": "[![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go)](https://golang.org/)\r [![React](https://img.shields.io/badge/React-18.0+-61DAFB?style=for-the-badge&logo=react)](https://reactjs.org/)\r [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-336791?style=for-the-badge&logo=postgresql)](https://postgresql.org/)\r [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker)](https://docker.com/)",
+  "main": "simulate-transactions.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KayMas2808/transaction-monitoring.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/KayMas2808/transaction-monitoring/issues"
+  },
+  "homepage": "https://github.com/KayMas2808/transaction-monitoring#readme",
+  "dependencies": {
+    "axios": "^1.11.0"
+  }
+}

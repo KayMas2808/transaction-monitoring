@@ -1,15 +1,11 @@
 // frontend/src/App.js
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast'; // Required for toast notifications
+import { Toaster } from 'react-hot-toast';
 
-// Import the new Login component
 import Login from './components/Login';
-// Import the existing Dashboard component
 import Dashboard from './components/Dashboard';
-// Import the new ProtectedRoute component
 import ProtectedRoute from './components/ProtectedRoute';
-// Import the auth helpers to check initial auth status for redirection
 import { auth } from './services/api';
 
 function App() {
