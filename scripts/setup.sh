@@ -129,20 +129,15 @@ wait_for_services() {
 }
 
 show_access_info() {
-    echo ""
-    print_success "Transaction Monitoring System is ready!"
-    echo ""
-    echo "Access the following services:"
-    echo "Frontend Dashboard:    http://localhost:3000"
-    echo "Backend API:          http://localhost:8080"
-    echo ""
-    echo "Default login credentials:"
-    echo "Username: admin"
-    echo "Password: admin123"
-    echo ""
-    echo "To stop the system: docker-compose down"
-    echo "To view logs: docker-compose logs -f"
-    echo ""
+echo "[SUCCESS] Transaction Monitoring System is ready!"
+echo ""
+echo "Access the application here:"
+echo "Application URL:      http://localhost:3000"
+echo ""
+echo "Default login credentials:"
+echo "Username: admin"
+echo "Password: admin123"
+
 }
 
 case "${1:-full}" in
