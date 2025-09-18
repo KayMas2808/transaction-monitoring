@@ -1,31 +1,22 @@
 import axios from "axios";
 
-// base instance
-const API = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || "http://localhost:8080/api",
+const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:3000";
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
 });
 
-// token to every request if present
-API.interceptors.request.use((config) => {
-  const token = localStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Auth helper
+// auth endpoints
 export const auth = {
-  login: (credentials) => API.post("/auth/login", credentials),
-  register: (userData) => API.post("/auth/register", userData),
-  logout: () => API.post("/auth/logout"),
-  me: () => API.get("/auth/me"),
+  login: (credentials) => api.post("/auth/login", credentials),
+  register: (data) => api.post("/auth/register", data),
 };
 
+// transactions endpoints
 export const transactions = {
-  getAll: () => API.get("/transactions"),
-  getById: (id) => API.get(`/transactions/${id}`),
-  create: (data) => API.post("/transactions", data),
+  list: () => api.get("/transactions"),
+  create: (data) => api.post("/transactions", data),
 };
 
-export default API;
+// axios instance
+export default api;
