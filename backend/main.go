@@ -1,44 +1,41 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
-
-	"github.com/gorilla/mux"
 )
 
+var hub = newHub()
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
-	err := InitDB("postgres://user:mysecretpassword@localhost:5432/fraud_detection?sslmode=disable")
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-	}
-	log.Println("Successfully connected to database!")
+	InitDB("postgres://user:mysecretpassword@localhost:5432/fraud_detection?sslmode=disable")
 
-	r := mux.NewRouter()
-
-	hub := newHub()
 	go hub.run()
 
-	r.HandleFunc("/transaction", handleNewTransaction(hub)).Methods("POST")
-
-	r.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+	http.Handle("/transaction", corsMiddleware(http.HandlerFunc(handleTransaction)))
+	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		serveWs(hub, w, r)
 	})
 
-	corsHandler := func(h http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-			w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
-			if r.Method == "OPTIONS" {
-				return
-			}
-			h.ServeHTTP(w, r)
-		})
-	}
-
-	log.Println("Server started on :8080")
-	if err := http.ListenAndServe(":8080", corsHandler(r)); err != nil {
-		log.Fatalf("could not start server: %v", err)
+	fmt.Println("Server starting on :8080")
+	err := http.ListenAndServe(":8080", nil)
+	if err != nil {
+		log.Fatal("ListenAndServe: ", err)
 	}
 }

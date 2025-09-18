@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"time"
 
@@ -10,41 +11,60 @@ import (
 
 var db *sql.DB
 
-func InitDB(dataSourceName string) error {
+func InitDB(dataSourceName string) {
 	var err error
 	db, err = sql.Open("postgres", dataSourceName)
 	if err != nil {
-		return err
+		log.Fatal(err)
 	}
-	return db.Ping()
+
+	if err = db.Ping(); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Successfully connected to the database!")
 }
 
-func SaveTransaction(t Transaction) (int, error) {
-	var id int
-	err := db.QueryRow(
-		"INSERT INTO transactions (user_id, amount, description, timestamp) VALUES ($1, $2, $3, $4) RETURNING id",
-		t.UserID, t.Amount, t.Description, t.Timestamp,
-	).Scan(&id)
-
+func CreateTransaction(t *Transaction) (*Transaction, error) {
+	query := `INSERT INTO transactions (user_id, amount, card_number, merchant_details, location, is_fraud, created_at)
+              VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`
+	err := db.QueryRow(query, t.UserID, t.Amount, t.CardNumber, t.MerchantDetails, t.Location, t.IsFraud, t.CreatedAt).Scan(&t.ID)
 	if err != nil {
-		log.Printf("Error saving transaction: %v", err)
-		return 0, err
+		return nil, err
 	}
-	return id, nil
+	return t, nil
 }
 
-func GetTransactionCountByUserInWindow(userID string, window time.Duration) (int, error) {
+func MarkTransactionAsFraud(transactionID int) error {
+	query := `UPDATE transactions SET is_fraud = TRUE WHERE id = $1`
+	_, err := db.Exec(query, transactionID)
+	return err
+}
+
+func CountTransactionsForUser(userID string, since time.Time) (int, error) {
 	var count int
-	since := time.Now().Add(-window)
-
-	err := db.QueryRow(
-		"SELECT COUNT(*) FROM transactions WHERE user_id = $1 AND timestamp >= $2",
-		userID, since,
-	).Scan(&count)
-
+	query := `SELECT COUNT(*) FROM transactions WHERE user_id = $1 AND created_at >= $2`
+	err := db.QueryRow(query, userID, since).Scan(&count)
 	if err != nil {
-		log.Printf("Error getting transaction count for user %s: %v", userID, err)
 		return 0, err
 	}
 	return count, nil
+}
+
+func GetRecentTransactionLocations(userID string, since time.Time) ([]string, error) {
+	var locations []string
+	query := `SELECT location FROM transactions WHERE user_id = $1 AND created_at >= $2`
+	rows, err := db.Query(query, userID, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var location string
+		if err := rows.Scan(&location); err != nil {
+			return nil, err
+		}
+		locations = append(locations, location)
+	}
+	return locations, nil
 }

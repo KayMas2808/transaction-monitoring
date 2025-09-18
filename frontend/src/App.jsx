@@ -1,209 +1,216 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { ComposableMap, Geographies, Geography, Marker } from 'react-simple-maps';
 
-// --- Main Application Component ---
+// world map rendering
+const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
+
+// city locations for simulation
+const locations = [
+  { name: "New York", coordinates: [-74.006, 40.7128] },
+  { name: "London", coordinates: [-0.1278, 51.5074] },
+  { name: "Tokyo", coordinates: [139.6917, 35.6895] },
+  { name: "Sydney", coordinates: [151.2093, -33.8688] },
+  { name: "Cairo", coordinates: [31.2357, 30.0444] },
+  { name: "Moscow", coordinates: [37.6173, 55.7558] },
+  { name: "Rio de Janeiro", coordinates: [-43.1729, -22.9068] },
+  { name: "Beijing", coordinates: [116.4074, 39.9042] },
+];
+
 function App() {
-  // State management
   const [transactions, setTransactions] = useState([]);
   const [alerts, setAlerts] = useState([]);
-  const [isAutomated, setIsAutomated] = useState(false);
+  const [isSimulating, setIsSimulating] = useState(false);
   const simulationInterval = useRef(null);
 
-  // WebSocket connection
+  const [totalTransactions, setTotalTransactions] = useState(0);
+  const [totalFraud, setTotalFraud] = useState(0);
+
+  const ws = useRef(null);
+
   useEffect(() => {
-    // Connect to the WebSocket server on the Go backend
-    const ws = new WebSocket('ws://localhost:8080/ws');
+    ws.current = new WebSocket('ws://localhost:8080/ws');
+    ws.current.onopen = () => console.log('WebSocket connected');
+    ws.current.onclose = () => console.log('WebSocket disconnected');
 
-    ws.onopen = () => {
-      console.log('WebSocket connected');
-    };
-
-    ws.onmessage = (event) => {
+    ws.current.onmessage = (event) => {
       const message = JSON.parse(event.data);
-      console.log('Received message:', message);
-
-      // Distinguish between new transactions and fraud alerts
       if (message.type === 'new_transaction') {
-        // Add new transaction to the top of the list, keeping the list at 20 items
-        setTransactions(prev => [message.payload, ...prev.slice(0, 19)]);
-      } else if (message.type === 'fraud_alert') {
-        // Add new alert to the top of the list
-        setAlerts(prev => [message.payload, ...prev.slice(0, 19)]);
+        const newTransaction = { ...message.payload, isNew: true };
+        setTransactions(prev => [newTransaction, ...prev.slice(0, 99)]);
+        setTotalTransactions(prev => prev + 1);
         
-        // Defensively check for the nested transaction object before updating the UI
-        const fraudulentTransaction = message.payload.transaction;
-        if (fraudulentTransaction) {
-            // Update the specific transaction to mark it as fraudulent for visual feedback
-            setTransactions(prev =>
-              prev.map(t =>
-                t.id === fraudulentTransaction.id
-                  ? { ...t, is_fraud: true }
-                  : t
-              )
-            );
+        const loc = locations.find(l => l.name === newTransaction.location);
+        if(loc) {
+          const alert = { ...loc, type: 'transaction' };
+          setAlerts(prev => [alert, ...prev.slice(0, 49)]);
         }
+
+      } else if (message.type === 'fraud_alert') {
+          if (message.payload && message.payload.transaction) {
+              const fraudulentTx = { ...message.payload.transaction, is_fraud: true, isNew: true };
+              setTransactions(prev => [fraudulentTx, ...prev.slice(0, 99)]);
+              
+              setTotalFraud(prev => prev + 1);
+
+              const loc = locations.find(l => l.name === fraudulentTx.location);
+              if(loc) {
+                const alert = { ...loc, type: 'fraud' };
+                setAlerts(prev => [alert, ...prev.slice(0, 49)]);
+              }
+          }
       }
     };
 
-    ws.onclose = () => {
-      console.log('WebSocket disconnected');
-    };
-
-    // Clean up the connection when the component unmounts
     return () => {
-      ws.close();
+      ws.current.close();
     };
-  }, []); // Empty dependency array ensures this runs only once on mount
+  }, []);
 
-  // Automated Transaction Simulation
   useEffect(() => {
-    if (isAutomated) {
-      // Start sending a new transaction every 2 seconds
-      simulationInterval.current = setInterval(() => {
-        handleSimulateTransaction(true); // true indicates it's an automated transaction
-      }, 2000);
-    } else {
-      // Stop the simulation
+    if (transactions.some(t => t.isNew)) {
+      const timer = setTimeout(() => {
+        setTransactions(prev => prev.map(t => ({ ...t, isNew: false })));
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [transactions]);
+
+
+  const simulateTransaction = () => {
+    const shouldBeImpossibleTravel = Math.random() < 0.1;
+    const shouldBeHighValue = Math.random() < 0.05;
+
+    const userId = `user_${Math.floor(Math.random() * 10)}`;
+    const location = locations[Math.floor(Math.random() * locations.length)];
+    
+    let amount = (Math.random() * 500).toFixed(2);
+    if(shouldBeHighValue) {
+      amount = (1500 + Math.random() * 500).toFixed(2);
+    }
+
+    const transaction = {
+      user_id: userId,
+      amount: parseFloat(amount),
+      card_number: `4242-XXXX-XXXX-${Math.floor(1000 + Math.random() * 9000)}`,
+      merchant_details: `Merchant ${String.fromCharCode(65 + Math.floor(Math.random() * 26))}`,
+      location: location.name,
+    };
+
+    fetch('http://localhost:8080/transaction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(transaction),
+    }).catch(err => console.error("Simulation Error:", err));
+
+    if (shouldBeImpossibleTravel) {
+        setTimeout(() => {
+            let distantLocation;
+            do {
+                distantLocation = locations[Math.floor(Math.random() * locations.length)];
+            } while (distantLocation.name === location.name);
+
+            const secondTransaction = {
+                ...transaction,
+                location: distantLocation.name,
+                amount: parseFloat((Math.random() * 500).toFixed(2)),
+            };
+
+            fetch('http://localhost:8080/transaction', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(secondTransaction),
+            }).catch(err => console.error("Simulation Error (Impossible Travel):", err));
+        }, 500);
+    }
+  };
+
+  const toggleSimulation = () => {
+    if (isSimulating) {
       clearInterval(simulationInterval.current);
-    }
-
-    // Cleanup on unmount
-    return () => clearInterval(simulationInterval.current);
-  }, [isAutomated]); // This effect runs whenever 'isAutomated' changes
-
-  // Function to send a transaction simulation request to the backend
-  const handleSimulateTransaction = async (isAuto = false) => {
-    try {
-      // Generate random data for the transaction
-      const randomUserId = `user_${Math.floor(Math.random() * 10)}`;
-      const randomAmount = (Math.random() * 500).toFixed(2);
-      const randomMerchant = `merchant_${Math.floor(Math.random() * 50)}`;
-
-      const transactionData = {
-        user_id: randomUserId,
-        amount: parseFloat(randomAmount),
-        merchant_details: randomMerchant,
-        card_number: `4242-4242-4242-${Math.floor(1000 + Math.random() * 9000)}`
-      };
-
-      const response = await fetch('http://localhost:8080/transaction', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(transactionData),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to simulate transaction');
-      }
-      console.log('Simulated transaction:', transactionData);
-    } catch (error) {
-      console.error('Error simulating transaction:', error);
+      setIsSimulating(false);
+    } else {
+      setIsSimulating(true);
+      simulationInterval.current = setInterval(simulateTransaction, 2000);
     }
   };
-  
-  const toggleAutomation = () => {
-    setIsAutomated(!isAutomated);
-  };
 
+  const fraudRate = totalTransactions > 0 ? ((totalFraud / totalTransactions) * 100).toFixed(2) : 0;
 
   return (
-    <div className="min-h-screen bg-gray-100 text-gray-800 font-sans">
-      <header className="bg-white shadow-md">
-        <div className="container mx-auto px-6 py-4">
-          <h1 className="text-3xl font-bold text-gray-900">Real-Time Transaction Monitor</h1>
-          <p className="text-gray-600">Admin dashboard for monitoring financial events and fraud alerts.</p>
-        </div>
-      </header>
+    <div className="bg-gray-900 text-white min-h-screen font-sans">
+      <div className="container mx-auto p-4 md:p-8">
+        <header className="mb-8">
+          <h1 className="text-4xl font-bold text-cyan-400">Real-Time Transaction Monitor</h1>
+          <p className="text-gray-400">Live feed of transactions and fraud alerts.</p>
+        </header>
 
-      <main className="container mx-auto px-6 py-8">
-        {/* --- Controls Section --- */}
-        <div className="bg-white p-6 rounded-lg shadow-lg mb-8">
-            <h2 className="text-xl font-semibold mb-4">Controls</h2>
-            <div className="flex space-x-4">
-                <button
-                    onClick={() => handleSimulateTransaction(false)}
-                    className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
-                >
-                    Simulate Single Transaction
-                </button>
-                <button
-                    onClick={toggleAutomation}
-                    className={`${
-                        isAutomated ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'
-                    } text-white font-bold py-2 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105`}
-                >
-                    {isAutomated ? 'Stop Automation' : 'Start Automated Transactions'}
-                </button>
-            </div>
-        </div>
-
-        {/* --- Dashboard Grids --- */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          
-          {/* --- Live Transactions Column --- */}
-          <div className="bg-white p-6 rounded-lg shadow-lg">
-            <h2 className="text-xl font-semibold mb-4 border-b pb-2">Live Transaction Stream</h2>
-            <div className="overflow-y-auto h-96">
-              <ul className="space-y-3">
-                {transactions.map(tx => (
-                  <TransactionItem key={tx.id} tx={tx} />
-                ))}
-              </ul>
-            </div>
-          </div>
-          
-          {/* --- Fraud Alerts Column --- */}
-          <div className="bg-white p-6 rounded-lg shadow-lg">
-            <h2 className="text-xl font-semibold mb-4 text-red-600 border-b pb-2">Fraud Alerts</h2>
-            <div className="overflow-y-auto h-96">
-              <ul className="space-y-3">
-                {alerts.map(alert => (
-                  <AlertItem key={alert.id} alert={alert} />
-                ))}
-              </ul>
-            </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 bg-gray-800 p-6 rounded-lg shadow-2xl">
+              <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-2xl font-semibold">Live Transaction Map</h2>
+                  <div className="flex items-center space-x-4">
+                      <button onClick={simulateTransaction} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                          Single Transaction
+                      </button>
+                      <button onClick={toggleSimulation} className={`font-bold py-2 px-4 rounded-lg transition-colors ${isSimulating ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}>
+                          {isSimulating ? 'Stop Simulation' : 'Start Simulation'}
+                      </button>
+                  </div>
+              </div>
+              <div className="w-full h-96 bg-gray-900 rounded-lg overflow-hidden">
+                <ComposableMap projectionConfig={{ scale: 140 }} style={{ width: "100%", height: "100%" }}>
+                  <Geographies geography={geoUrl}>
+                    {({ geographies }) =>
+                      geographies.map(geo => <Geography key={geo.rsmKey} geography={geo} fill="#334155" stroke="#1e293b" />)
+                    }
+                  </Geographies>
+                  {alerts.map((alert, i) => (
+                    <Marker key={i} coordinates={alert.coordinates}>
+                      <circle r={5} className={alert.type === 'fraud' ? 'text-red-500 animate-ping' : 'text-cyan-400'} fillOpacity={0.5} />
+                      <circle r={3} className={alert.type === 'fraud' ? 'text-red-500' : 'text-cyan-400'} fill="currentColor" />
+                    </Marker>
+                  ))}
+                </ComposableMap>
+              </div>
           </div>
 
+          <div className="bg-gray-800 p-6 rounded-lg shadow-2xl">
+            <h2 className="text-2xl font-semibold mb-4 border-b border-gray-700 pb-2">Statistics</h2>
+            <div className="grid grid-cols-3 gap-4 text-center mb-6">
+              <div>
+                <p className="text-gray-400 text-sm">Total Transactions</p>
+                <p className="text-2xl font-bold text-cyan-400">{totalTransactions}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-sm">Fraud Alerts</p>
+                <p className="text-2xl font-bold text-red-500">{totalFraud}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-sm">Fraud Rate</p>
+                <p className="text-2xl font-bold text-yellow-400">{fraudRate}%</p>
+              </div>
+            </div>
+            <h2 className="text-2xl font-semibold mb-4 border-b border-gray-700 pb-2">Transaction Feed</h2>
+            <div className="space-y-3 h-96 overflow-y-auto pr-2">
+              {transactions.map(tx => (
+                <div key={tx.id || Math.random()} className={`p-3 rounded-lg transition-all duration-1000 ${tx.isNew ? 'bg-gray-600 scale-105' : 'bg-gray-700'} ${tx.is_fraud ? 'border-2 border-red-500' : ''}`}>
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold">{tx.user_id}</span>
+                    <span className={`font-bold ${tx.is_fraud ? 'text-red-400' : 'text-green-400'}`}>${typeof tx.amount === 'number' ? tx.amount.toFixed(2) : '0.00'}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm text-gray-400 mt-1">
+                    <span>{tx.location || 'N/A'}</span>
+                    <span>{new Date(tx.created_at).toLocaleTimeString()}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
-
-
-// --- Sub-component for a single transaction item ---
-const TransactionItem = ({ tx }) => {
-    const isFraud = tx.is_fraud;
-    const baseClasses = "p-3 rounded-lg border border-gray-200 transition duration-300";
-    // If it's fraud, apply a flashing red background. Otherwise, a calm gray.
-    const conditionalClasses = isFraud 
-        ? "bg-red-100 border-red-400 animate-pulse" 
-        : "bg-gray-50";
-
-    return (
-        <li className={`${baseClasses} ${conditionalClasses}`}>
-            <div className="flex justify-between items-center">
-                <span className="font-mono text-sm text-gray-700">{tx.user_id}</span>
-                <span className="font-bold text-lg text-gray-900">${parseFloat(tx.amount).toFixed(2)}</span>
-            </div>
-            <div className="text-xs text-gray-500 mt-1">
-                <span>{tx.merchant_details}</span> | <span>ID: {tx.id}</span>
-            </div>
-        </li>
-    );
-};
-
-// --- Sub-component for a single alert item ---
-const AlertItem = ({ alert }) => (
-  <li className="bg-red-50 p-3 rounded-lg border border-red-300">
-    <div className="font-bold text-red-800">{alert.rule_name}</div>
-    <div className="text-sm text-red-700 mt-1">
-      <p>{alert.details}</p>
-      {alert.transaction && <p className="font-mono text-xs mt-2">Transaction ID: {alert.transaction.id}</p>}
-    </div>
-  </li>
-);
 
 export default App;
 
