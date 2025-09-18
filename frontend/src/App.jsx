@@ -1,192 +1,209 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
-// --- Reusable Components ---
-
-const Card = ({ children, className = '' }) => (
-  <div className={`bg-gray-800 shadow-lg rounded-xl p-6 ${className}`}>
-    {children}
-  </div>
-);
-
-const CardHeader = ({ title, subtitle }) => (
-  <div className="mb-4 border-b border-gray-700 pb-4">
-    <h2 className="text-2xl font-bold text-white">{title}</h2>
-    <p className="text-gray-400">{subtitle}</p>
-  </div>
-);
-
-const StatusIndicator = ({ connected }) => (
-  <div className="flex items-center space-x-2">
-    <div className={`w-3 h-3 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
-    <span className="text-gray-300 font-medium">
-      {connected ? 'Connected to Real-Time Service' : 'Disconnected'}
-    </span>
-  </div>
-);
-
-// --- Main App Component ---
-
+// --- Main Application Component ---
 function App() {
+  // State management
   const [transactions, setTransactions] = useState([]);
   const [alerts, setAlerts] = useState([]);
-  const [isConnected, setIsConnected] = useState(false);
-  const [formState, setFormState] = useState({ userId: '', amount: '', description: '' });
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAutomated, setIsAutomated] = useState(false);
+  const simulationInterval = useRef(null);
 
-  // Effect to handle WebSocket connection
+  // WebSocket connection
   useEffect(() => {
-    const socket = new WebSocket('ws://localhost:8080/ws');
+    // Connect to the WebSocket server on the Go backend
+    const ws = new WebSocket('ws://localhost:8080/ws');
 
-    socket.onopen = () => {
-      console.log('WebSocket connection established');
-      setIsConnected(true);
+    ws.onopen = () => {
+      console.log('WebSocket connected');
     };
 
-    socket.onmessage = (event) => {
+    ws.onmessage = (event) => {
       const message = JSON.parse(event.data);
+      console.log('Received message:', message);
+
+      // Distinguish between new transactions and fraud alerts
       if (message.type === 'new_transaction') {
-        setTransactions(prev => [message.payload, ...prev]);
+        // Add new transaction to the top of the list, keeping the list at 20 items
+        setTransactions(prev => [message.payload, ...prev.slice(0, 19)]);
       } else if (message.type === 'fraud_alert') {
-        setAlerts(prev => [message.payload, ...prev]);
+        // Add new alert to the top of the list
+        setAlerts(prev => [message.payload, ...prev.slice(0, 19)]);
+        
+        // Defensively check for the nested transaction object before updating the UI
+        const fraudulentTransaction = message.payload.transaction;
+        if (fraudulentTransaction) {
+            // Update the specific transaction to mark it as fraudulent for visual feedback
+            setTransactions(prev =>
+              prev.map(t =>
+                t.id === fraudulentTransaction.id
+                  ? { ...t, is_fraud: true }
+                  : t
+              )
+            );
+        }
       }
     };
 
-    socket.onclose = () => {
-      console.log('WebSocket connection closed');
-      setIsConnected(false);
+    ws.onclose = () => {
+      console.log('WebSocket disconnected');
     };
 
-    socket.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      setIsConnected(false);
-    };
-
-    // Cleanup on component unmount
+    // Clean up the connection when the component unmounts
     return () => {
-      socket.close();
+      ws.close();
     };
-  }, []);
+  }, []); // Empty dependency array ensures this runs only once on mount
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormState(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!formState.userId || !formState.amount) {
-      alert('User ID and Amount are required.');
-      return;
+  // Automated Transaction Simulation
+  useEffect(() => {
+    if (isAutomated) {
+      // Start sending a new transaction every 2 seconds
+      simulationInterval.current = setInterval(() => {
+        handleSimulateTransaction(true); // true indicates it's an automated transaction
+      }, 2000);
+    } else {
+      // Stop the simulation
+      clearInterval(simulationInterval.current);
     }
-    setIsSubmitting(true);
+
+    // Cleanup on unmount
+    return () => clearInterval(simulationInterval.current);
+  }, [isAutomated]); // This effect runs whenever 'isAutomated' changes
+
+  // Function to send a transaction simulation request to the backend
+  const handleSimulateTransaction = async (isAuto = false) => {
     try {
+      // Generate random data for the transaction
+      const randomUserId = `user_${Math.floor(Math.random() * 10)}`;
+      const randomAmount = (Math.random() * 500).toFixed(2);
+      const randomMerchant = `merchant_${Math.floor(Math.random() * 50)}`;
+
+      const transactionData = {
+        user_id: randomUserId,
+        amount: parseFloat(randomAmount),
+        merchant_details: randomMerchant,
+        card_number: `4242-4242-4242-${Math.floor(1000 + Math.random() * 9000)}`
+      };
+
       const response = await fetch('http://localhost:8080/transaction', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: formState.userId,
-          amount: parseFloat(formState.amount),
-          description: formState.description,
-        }),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(transactionData),
       });
-      if (!response.ok) {
-        throw new Error('Failed to submit transaction');
-      }
-      // The websocket will push the update, so no need to manually add it here.
-      // Clear part of the form for the next transaction.
-      setFormState(prev => ({ ...prev, amount: '', description: '' }));
 
+      if (!response.ok) {
+        throw new Error('Failed to simulate transaction');
+      }
+      console.log('Simulated transaction:', transactionData);
     } catch (error) {
-      console.error('Submission error:', error);
-      alert('Could not submit transaction. Check the console.');
-    } finally {
-      setIsSubmitting(false);
+      console.error('Error simulating transaction:', error);
     }
+  };
+  
+  const toggleAutomation = () => {
+    setIsAutomated(!isAutomated);
   };
 
 
   return (
-    <div className="bg-gray-900 min-h-screen text-gray-200 font-sans p-4 sm:p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8">
-          <div>
-            <h1 className="text-4xl font-extrabold text-white tracking-tight">Financial Monitoring Dashboard</h1>
-            <p className="text-gray-400 mt-1">Real-time fraud detection and transaction streaming.</p>
-          </div>
-          <div className="mt-4 sm:mt-0">
-            <StatusIndicator connected={isConnected} />
-          </div>
-        </header>
-
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-          {/* Left Column: Transaction Simulation */}
-          <div className="lg:col-span-1">
-            <Card>
-              <CardHeader title="Simulate New Transaction" subtitle="Create a test transaction." />
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label htmlFor="userId" className="block text-sm font-medium text-gray-300 mb-1">User ID</label>
-                  <input type="text" name="userId" id="userId" value={formState.userId} onChange={handleInputChange} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g., user-123" />
-                </div>
-                <div>
-                  <label htmlFor="amount" className="block text-sm font-medium text-gray-300 mb-1">Amount ($)</label>
-                  <input type="number" name="amount" id="amount" value={formState.amount} onChange={handleInputChange} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g., 99.99" step="0.01" />
-                </div>
-                <div>
-                  <label htmlFor="description" className="block text-sm font-medium text-gray-300 mb-1">Description</label>
-                  <input type="text" name="description" id="description" value={formState.description} onChange={handleInputChange} className="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g., Online Purchase" />
-                </div>
-                <button type="submit" disabled={isSubmitting} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-md transition duration-300 ease-in-out disabled:bg-indigo-900 disabled:cursor-not-allowed">
-                  {isSubmitting ? 'Submitting...' : 'Submit Transaction'}
-                </button>
-              </form>
-            </Card>
-          </div>
-
-          {/* Right Column: Feeds */}
-          <div className="lg:col-span-2 space-y-8">
-            {/* Fraud Alerts */}
-            <Card>
-              <CardHeader title="Fraud Alerts" subtitle="High-priority events requiring attention." />
-              <div className="h-64 overflow-y-auto pr-2 space-y-3">
-                {alerts.length === 0 ? <p className="text-gray-500">No alerts yet.</p> :
-                  alerts.map(alert => (
-                    <div key={alert.alertId} className="bg-red-900/50 border border-red-700 p-3 rounded-lg animate-fade-in">
-                      <p className="font-bold text-red-300">{alert.reason}</p>
-                      <p className="text-sm text-gray-300">User <span className="font-mono bg-gray-700 px-1 rounded">{alert.userId}</span> flagged for high transaction frequency.</p>
-                      <p className="text-xs text-gray-400 mt-1">{new Date(alert.timestamp).toLocaleString()}</p>
-                    </div>
-                  ))}
-              </div>
-            </Card>
-
-            {/* Live Transactions */}
-            <Card>
-              <CardHeader title="Live Transaction Feed" subtitle="All incoming financial transactions." />
-              <div className="h-96 overflow-y-auto pr-2 space-y-3">
-                {transactions.length === 0 ? <p className="text-gray-500">Waiting for transactions...</p> :
-                  transactions.map(tx => (
-                    <div key={tx.id} className="bg-gray-700/50 p-3 rounded-lg flex justify-between items-center animate-fade-in-down">
-                      <div>
-                        <p className="font-semibold text-white">{tx.description || 'N/A'}</p>
-                        <p className="text-sm text-gray-400">User ID: <span className="font-mono">{tx.userId}</span></p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-lg font-bold text-green-400">${parseFloat(tx.amount).toFixed(2)}</p>
-                        <p className="text-xs text-gray-500">{new Date(tx.timestamp).toLocaleTimeString()}</p>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </Card>
-          </div>
+    <div className="min-h-screen bg-gray-100 text-gray-800 font-sans">
+      <header className="bg-white shadow-md">
+        <div className="container mx-auto px-6 py-4">
+          <h1 className="text-3xl font-bold text-gray-900">Real-Time Transaction Monitor</h1>
+          <p className="text-gray-600">Admin dashboard for monitoring financial events and fraud alerts.</p>
         </div>
-      </div>
+      </header>
+
+      <main className="container mx-auto px-6 py-8">
+        {/* --- Controls Section --- */}
+        <div className="bg-white p-6 rounded-lg shadow-lg mb-8">
+            <h2 className="text-xl font-semibold mb-4">Controls</h2>
+            <div className="flex space-x-4">
+                <button
+                    onClick={() => handleSimulateTransaction(false)}
+                    className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105"
+                >
+                    Simulate Single Transaction
+                </button>
+                <button
+                    onClick={toggleAutomation}
+                    className={`${
+                        isAutomated ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'
+                    } text-white font-bold py-2 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105`}
+                >
+                    {isAutomated ? 'Stop Automation' : 'Start Automated Transactions'}
+                </button>
+            </div>
+        </div>
+
+        {/* --- Dashboard Grids --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          
+          {/* --- Live Transactions Column --- */}
+          <div className="bg-white p-6 rounded-lg shadow-lg">
+            <h2 className="text-xl font-semibold mb-4 border-b pb-2">Live Transaction Stream</h2>
+            <div className="overflow-y-auto h-96">
+              <ul className="space-y-3">
+                {transactions.map(tx => (
+                  <TransactionItem key={tx.id} tx={tx} />
+                ))}
+              </ul>
+            </div>
+          </div>
+          
+          {/* --- Fraud Alerts Column --- */}
+          <div className="bg-white p-6 rounded-lg shadow-lg">
+            <h2 className="text-xl font-semibold mb-4 text-red-600 border-b pb-2">Fraud Alerts</h2>
+            <div className="overflow-y-auto h-96">
+              <ul className="space-y-3">
+                {alerts.map(alert => (
+                  <AlertItem key={alert.id} alert={alert} />
+                ))}
+              </ul>
+            </div>
+          </div>
+
+        </div>
+      </main>
     </div>
   );
 }
 
+
+// --- Sub-component for a single transaction item ---
+const TransactionItem = ({ tx }) => {
+    const isFraud = tx.is_fraud;
+    const baseClasses = "p-3 rounded-lg border border-gray-200 transition duration-300";
+    // If it's fraud, apply a flashing red background. Otherwise, a calm gray.
+    const conditionalClasses = isFraud 
+        ? "bg-red-100 border-red-400 animate-pulse" 
+        : "bg-gray-50";
+
+    return (
+        <li className={`${baseClasses} ${conditionalClasses}`}>
+            <div className="flex justify-between items-center">
+                <span className="font-mono text-sm text-gray-700">{tx.user_id}</span>
+                <span className="font-bold text-lg text-gray-900">${parseFloat(tx.amount).toFixed(2)}</span>
+            </div>
+            <div className="text-xs text-gray-500 mt-1">
+                <span>{tx.merchant_details}</span> | <span>ID: {tx.id}</span>
+            </div>
+        </li>
+    );
+};
+
+// --- Sub-component for a single alert item ---
+const AlertItem = ({ alert }) => (
+  <li className="bg-red-50 p-3 rounded-lg border border-red-300">
+    <div className="font-bold text-red-800">{alert.rule_name}</div>
+    <div className="text-sm text-red-700 mt-1">
+      <p>{alert.details}</p>
+      {alert.transaction && <p className="font-mono text-xs mt-2">Transaction ID: {alert.transaction.id}</p>}
+    </div>
+  </li>
+);
+
 export default App;
+
