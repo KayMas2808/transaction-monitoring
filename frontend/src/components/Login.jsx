@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authAPI, auth } from '../services/api';
+import { auth } from "../services/api";
 import toast from 'react-hot-toast';
 
 const Login = () => {
@@ -11,7 +11,7 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const response = await authAPI.login({ username, password });
+      const response = await auth.login({ username, password });
       auth.setAuth(response.data.token, response.data.user);
       toast.success('Login successful!');
       navigate('/dashboard');
