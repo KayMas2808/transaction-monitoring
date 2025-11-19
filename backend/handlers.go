@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func handleTransaction(w http.ResponseWriter, r *http.Request) {
+func SimulateTransaction(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
 		return
@@ -42,6 +42,17 @@ func handleTransaction(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"status": "success", "transaction_id": fmt.Sprintf("%d", t.ID)})
+}
+
+func GetTransactions(w http.ResponseWriter, r *http.Request) {
+	transactions, err := GetRecentTransactions(50)
+	if err != nil {
+		log.Printf("Error getting transactions: %v", err)
+		http.Error(w, "Failed to get transactions", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(transactions)
 }
 
 func serveWs(hub *Hub, w http.ResponseWriter, r *http.Request) {

@@ -8,8 +8,8 @@ type Transaction struct {
 	Amount          float64   `json:"amount"`
 	CardNumber      string    `json:"card_number"`
 	MerchantDetails string    `json:"merchant_details"`
-	Location        string    `json:"location"` // NEW: For geographic rules
-	IsFraud         bool      `json:"is_fraud"` // NEW: To flag a transaction's state
+	Location        string    `json:"location"`
+	IsFraud         bool      `json:"is_fraud"`
 	CreatedAt       time.Time `json:"created_at"`
 }
 

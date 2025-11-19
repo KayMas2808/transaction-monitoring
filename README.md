@@ -1,65 +1,47 @@
-Real-Time Financial Transaction Monitoring System
+# Real-Time Transaction Monitoring System
 
-This project is a full-stack application designed to monitor financial transactions in real-time, detect fraudulent activity based on a set of rules, and visualize the data on a live dashboard.
-Key Features
+A financial fraud detection system that monitors transactions in real-time and flags suspicious activity using multiple detection algorithms.
 
-    Automated Fraud Detection: The Go backend analyzes transactions against multiple rules:
+## What It Does
 
-        High-Value Transactions: Flags any transaction over a configurable threshold.
+This system watches financial transactions as they happen and automatically detects fraud using four different methods:
 
-        Velocity Checks: Flags users making too many transactions in a short period.
+**Velocity Check** - Flags users making too many transactions too quickly (more than 5 per minute). Uses Redis for lightning-fast counting.
 
-        Geographic Inconsistency: Flags transactions from the same user in geographically impossible locations within a short time frame (e.g., Tokyo and New York within the same minute).
+**High Value Check** - Catches transactions over $1500.
 
-    Live World Map Visualization: Transaction locations are plotted on a dynamic world map, with fraudulent alerts highlighted in red.
+**Geographic Inconsistency** - Detects impossible travel, like transactions in London and New York within 60 seconds.
 
+**Z-Score Analysis** - Uses statistics to find transactions that don't match a user's normal spending pattern. If a transaction is more than 3 standard deviations from their average, it gets flagged.
 
-    Transaction Simulator: The frontend includes a tool to simulate a realistic stream of transactions to demonstrate the system's capabilities.
+## Tech Stack
 
-Tech Stack
+Backend: Go with Gorilla Mux and WebSockets
+Frontend: React with Tailwind CSS
+Database: PostgreSQL for storing transactions
+Cache: Redis for high-speed fraud checks
+Infrastructure: Docker Compose
 
-    Backend: Go
+## Running It
 
-        Web Server: gorilla/mux for routing.
+Clone the repo and run:
 
-        WebSockets: gorilla/websocket for real-time communication.
+```bash
+docker-compose up --build
+```
 
-        Database: PostgreSQL (lib/pq driver).
+Then open http://localhost:3000 in your browser.
 
-    Frontend: React
+Click "Start Simulation" to generate fake transactions and watch the fraud detection in action. The map shows where transactions are happening, and fraudulent ones appear in red with the reason they were flagged.
 
-        Styling: Tailwind CSS.
+## How It Works
 
-        Map Visualization: react-simple-maps.
+When a transaction comes in, it gets saved to PostgreSQL and immediately broadcast to all connected browsers via WebSocket. At the same time, the fraud detector runs all four checks. If any check fails, the transaction is marked as fraud in the database and a fraud alert is sent to all browsers.
 
-    Database: PostgreSQL (running in Docker).
+Redis handles the velocity tracking and stores recent transaction amounts for Z-Score calculations. This keeps everything fast even under heavy load.
 
-How to Run
-1. Start the Database
+The frontend maintains "sticky" locations for users during simulation, so they don't teleport around the world with every transaction. Users stay in one city and only occasionally travel, making the fraud detection more realistic.
 
-docker run --name fraud-db -e POSTGRES_PASSWORD=mysecretpassword -e POSTGRES_USER=user -e POSTGRES_DB=fraud_detection -p 5432:5432 -d postgres
+## Documentation
 
-2. Create the Database Table
-
-Connect to the running container:
-
-docker exec -it fraud-db psql -U user -d fraud_detection
-
-And run the SQL schema from backend/database.go.
-3. Run the Backend Server
-
-Navigate to the backend directory:
-
-cd backend
-go run .
-
-The server will start on localhost:8080.
-4. Run the Frontend Dashboard
-
-Navigate to the frontend directory in a new terminal:
-
-cd frontend
-npm install
-npm start
-
-The dashboard will be available at http://localhost:3000.
+For detailed technical documentation including architecture diagrams and code explanations, see TECHNICAL_DOCUMENTATION.md.

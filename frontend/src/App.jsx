@@ -38,32 +38,51 @@ function App() {
         const newTransaction = { ...message.payload, isNew: true };
         setTransactions(prev => [newTransaction, ...prev.slice(0, 99)]);
         setTotalTransactions(prev => prev + 1);
-        
+
         const loc = locations.find(l => l.name === newTransaction.location);
-        if(loc) {
+        if (loc) {
           const alert = { ...loc, type: 'transaction' };
           setAlerts(prev => [alert, ...prev.slice(0, 49)]);
         }
 
       } else if (message.type === 'fraud_alert') {
-          if (message.payload && message.payload.transaction) {
-              const fraudulentTx = { ...message.payload.transaction, is_fraud: true, isNew: true };
-              setTransactions(prev => [fraudulentTx, ...prev.slice(0, 99)]);
-              
-              setTotalFraud(prev => prev + 1);
+        if (message.payload && message.payload.transaction) {
+          const fraudulentTx = {
+            ...message.payload.transaction,
+            is_fraud: true,
+            isNew: true,
+            fraud_reason: message.payload.rule_violated
+          };
+          setTransactions(prev => [fraudulentTx, ...prev.slice(0, 99)]);
 
-              const loc = locations.find(l => l.name === fraudulentTx.location);
-              if(loc) {
-                const alert = { ...loc, type: 'fraud' };
-                setAlerts(prev => [alert, ...prev.slice(0, 49)]);
-              }
+          setTotalFraud(prev => prev + 1);
+
+          const loc = locations.find(l => l.name === fraudulentTx.location);
+          if (loc) {
+            const alert = { ...loc, type: 'fraud' };
+            setAlerts(prev => [alert, ...prev.slice(0, 49)]);
           }
+        }
       }
     };
 
     return () => {
       ws.current.close();
     };
+  }, []);
+
+  useEffect(() => {
+    fetch('http://localhost:8080/api/transactions')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setTransactions(data);
+          setTotalTransactions(data.length);
+          const fraudCount = data.filter(t => t.is_fraud).length;
+          setTotalFraud(fraudCount);
+        }
+      })
+      .catch(err => console.error("Error fetching transactions:", err));
   }, []);
 
   useEffect(() => {
@@ -76,15 +95,25 @@ function App() {
   }, [transactions]);
 
 
+  const userLocations = useRef({});
+
   const simulateTransaction = () => {
     const shouldBeImpossibleTravel = Math.random() < 0.1;
     const shouldBeHighValue = Math.random() < 0.05;
+    const shouldTravel = Math.random() < 0.05; // 5% chance to change location normally
 
     const userId = `user_${Math.floor(Math.random() * 10)}`;
-    const location = locations[Math.floor(Math.random() * locations.length)];
-    
+
+    let location;
+    if (!userLocations.current[userId] || shouldTravel) {
+      location = locations[Math.floor(Math.random() * locations.length)];
+      userLocations.current[userId] = location;
+    } else {
+      location = userLocations.current[userId];
+    }
+
     let amount = (Math.random() * 500).toFixed(2);
-    if(shouldBeHighValue) {
+    if (shouldBeHighValue) {
       amount = (1500 + Math.random() * 500).toFixed(2);
     }
 
@@ -96,31 +125,31 @@ function App() {
       location: location.name,
     };
 
-    fetch('http://localhost:8080/transaction', {
+    fetch('http://localhost:8080/api/simulate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(transaction),
     }).catch(err => console.error("Simulation Error:", err));
 
     if (shouldBeImpossibleTravel) {
-        setTimeout(() => {
-            let distantLocation;
-            do {
-                distantLocation = locations[Math.floor(Math.random() * locations.length)];
-            } while (distantLocation.name === location.name);
+      setTimeout(() => {
+        let distantLocation;
+        do {
+          distantLocation = locations[Math.floor(Math.random() * locations.length)];
+        } while (distantLocation.name === location.name);
 
-            const secondTransaction = {
-                ...transaction,
-                location: distantLocation.name,
-                amount: parseFloat((Math.random() * 500).toFixed(2)),
-            };
+        const secondTransaction = {
+          ...transaction,
+          location: distantLocation.name,
+          amount: parseFloat((Math.random() * 500).toFixed(2)),
+        };
 
-            fetch('http://localhost:8080/transaction', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(secondTransaction),
-            }).catch(err => console.error("Simulation Error (Impossible Travel):", err));
-        }, 500);
+        fetch('http://localhost:8080/api/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(secondTransaction),
+        }).catch(err => console.error("Simulation Error (Impossible Travel):", err));
+      }, 500);
     }
   };
 
@@ -146,32 +175,32 @@ function App() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 bg-gray-800 p-6 rounded-lg shadow-2xl">
-              <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-2xl font-semibold">Live Transaction Map</h2>
-                  <div className="flex items-center space-x-4">
-                      <button onClick={simulateTransaction} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
-                          Single Transaction
-                      </button>
-                      <button onClick={toggleSimulation} className={`font-bold py-2 px-4 rounded-lg transition-colors ${isSimulating ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}>
-                          {isSimulating ? 'Stop Simulation' : 'Start Simulation'}
-                      </button>
-                  </div>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-semibold">Live Transaction Map</h2>
+              <div className="flex items-center space-x-4">
+                <button onClick={simulateTransaction} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                  Single Transaction
+                </button>
+                <button onClick={toggleSimulation} className={`font-bold py-2 px-4 rounded-lg transition-colors ${isSimulating ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}>
+                  {isSimulating ? 'Stop Simulation' : 'Start Simulation'}
+                </button>
               </div>
-              <div className="w-full h-96 bg-gray-900 rounded-lg overflow-hidden">
-                <ComposableMap projectionConfig={{ scale: 140 }} style={{ width: "100%", height: "100%" }}>
-                  <Geographies geography={geoUrl}>
-                    {({ geographies }) =>
-                      geographies.map(geo => <Geography key={geo.rsmKey} geography={geo} fill="#334155" stroke="#1e293b" />)
-                    }
-                  </Geographies>
-                  {alerts.map((alert, i) => (
-                    <Marker key={i} coordinates={alert.coordinates}>
-                      <circle r={5} className={alert.type === 'fraud' ? 'text-red-500 animate-ping' : 'text-cyan-400'} fillOpacity={0.5} />
-                      <circle r={3} className={alert.type === 'fraud' ? 'text-red-500' : 'text-cyan-400'} fill="currentColor" />
-                    </Marker>
-                  ))}
-                </ComposableMap>
-              </div>
+            </div>
+            <div className="w-full h-96 bg-gray-900 rounded-lg overflow-hidden">
+              <ComposableMap projectionConfig={{ scale: 140 }} style={{ width: "100%", height: "100%" }}>
+                <Geographies geography={geoUrl}>
+                  {({ geographies }) =>
+                    geographies.map(geo => <Geography key={geo.rsmKey} geography={geo} fill="#334155" stroke="#1e293b" />)
+                  }
+                </Geographies>
+                {alerts.map((alert, i) => (
+                  <Marker key={i} coordinates={alert.coordinates}>
+                    <circle r={5} className={alert.type === 'fraud' ? 'text-red-500 animate-ping' : 'text-cyan-400'} fillOpacity={0.5} />
+                    <circle r={3} className={alert.type === 'fraud' ? 'text-red-500' : 'text-cyan-400'} fill="currentColor" />
+                  </Marker>
+                ))}
+              </ComposableMap>
+            </div>
           </div>
 
           <div className="bg-gray-800 p-6 rounded-lg shadow-2xl">
@@ -202,6 +231,11 @@ function App() {
                     <span>{tx.location || 'N/A'}</span>
                     <span>{new Date(tx.created_at).toLocaleTimeString()}</span>
                   </div>
+                  {tx.is_fraud && tx.fraud_reason && (
+                    <div className="text-xs text-red-400 mt-1 font-semibold">
+                      Reason: {tx.fraud_reason}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"math"
 	"time"
 )
 
@@ -12,7 +14,15 @@ func RunFraudChecks(t Transaction) {
 		CheckVelocity,
 		CheckHighValue,
 		CheckGeographicInconsistency,
+		CheckZScore,
 	}
+
+	go func() {
+		err := AddTransactionAmount(t.UserID, t.Amount)
+		if err != nil {
+			log.Printf("Error adding transaction to history: %v", err)
+		}
+	}()
 
 	for _, rule := range rules {
 		isFraud, ruleName := rule(t)
@@ -37,13 +47,12 @@ func RunFraudChecks(t Transaction) {
 }
 
 func CheckVelocity(t Transaction) (bool, string) {
-	oneMinuteAgo := time.Now().Add(-1 * time.Minute)
-	count, err := CountTransactionsForUser(t.UserID, oneMinuteAgo)
+	count, err := IncrementVelocity(t.UserID)
 	if err != nil {
-		log.Printf("Error checking velocity: %v", err)
+		log.Printf("Error checking velocity via Redis: %v", err)
 		return false, ""
 	}
-	return count > 3, "Velocity Check"
+	return count > 5, "Velocity Check (Redis)"
 }
 
 func CheckHighValue(t Transaction) (bool, string) {
@@ -64,5 +73,37 @@ func CheckGeographicInconsistency(t Transaction) (bool, string) {
 			return true, "Geographic Inconsistency"
 		}
 	}
+	return false, ""
+}
+
+func CheckZScore(t Transaction) (bool, string) {
+	amounts, err := GetRecentAmounts(t.UserID)
+	if err != nil || len(amounts) < 5 {
+		return false, ""
+	}
+
+	var sum float64
+	for _, a := range amounts {
+		sum += a
+	}
+	mean := sum / float64(len(amounts))
+
+	var varianceSum float64
+	for _, a := range amounts {
+		varianceSum += math.Pow(a-mean, 2)
+	}
+	stdDev := math.Sqrt(varianceSum / float64(len(amounts)))
+
+	if stdDev == 0 {
+		return false, ""
+	}
+
+	zScore := (t.Amount - mean) / stdDev
+
+	if math.Abs(zScore) > 3 {
+		log.Printf("Z-Score Alert: User %s, Amount %.2f, Mean %.2f, StdDev %.2f, Z %.2f", t.UserID, t.Amount, mean, stdDev, zScore)
+		return true, fmt.Sprintf("Statistical Anomaly (Z-Score: %.2f)", zScore)
+	}
+
 	return false, ""
 }
